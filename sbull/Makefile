@@ -13,6 +13,7 @@ EXTRA_CFLAGS += $(DEBFLAGS)
 # for case RM_SIMPLE fall through
 EXTRA_CFLAGS += -I.. -Wno-implicit-fallthrough
 
+#ldd3 p29 begin
 ifneq ($(KERNELRELEASE),)
 # call from kernel build system
 
@@ -27,7 +28,7 @@ default:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
 
 endif
-
+#ldd3 p29 over
 
 
 clean:

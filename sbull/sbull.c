@@ -36,9 +36,9 @@ static int sbull_major = 0;
 module_param(sbull_major, int, 0);
 static int hardsect_size = 512;
 module_param(hardsect_size, int, 0);
-static int nsectors = 1024;	/* How big the drive is */
+static int nsectors = 1024 * 20;	/* How big the drive is */
 module_param(nsectors, int, 0);
-static int ndevices = 4;
+static int ndevices = 1;
 module_param(ndevices, int, 0);
 
 /*
@@ -48,9 +48,12 @@ enum {
 	RM_SIMPLE  = 0,	/* The extra-simple request function */
 	RM_FULL    = 1,	/* The full-blown version */
 	RM_NOQUEUE = 2,	/* Use make_request */
+	RM_MQ = 3,/* cyf two-level multi-queue mode*/
 };
-static int request_mode = RM_SIMPLE;
+static int request_mode = RM_NOQUEUE;
 module_param(request_mode, int, 0);
+
+struct funny_mud_pee;
 
 /*
  * Minor number and partition management.
@@ -68,7 +71,9 @@ module_param(request_mode, int, 0);
 /*
  * After this much idle time, the driver will simulate a media change.
  */
-#define INVALIDATE_DELAY	30*HZ
+//这个值之前设置了30，太短了，导致我每次fdisk ，mkfs之后就失效了，所以总是mount失败
+//有的时候fdisk之后就失效了，连mkfs都不行。
+#define INVALIDATE_DELAY	3000*HZ
 
 /*
  * The internal representation of our device.
@@ -77,13 +82,20 @@ struct sbull_dev {
         int size;                       /* Device size in sectors */
         u8 *data;                       /* The data array */
         short users;                    /* How many users */
-        short media_change;             /* Flag a media change? */
         spinlock_t lock;                /* For mutual exclusion */
 	struct blk_mq_tag_set tag_set;	/* tag_set added */
         struct request_queue *queue;    /* The device request queue */
+	
+	//notice that the gendisk has only one request queue
         struct gendisk *gd;             /* The gendisk structure */
+	unsigned int queue_depth;	
+        
+	short media_change;             /* Flag a media change? */
         struct timer_list timer;        /* For simulated media changes */
 };
+
+static int nr_hw_queues = 1;
+static int hw_queue_depth = 64;
 
 static struct sbull_dev *Devices = NULL;
 
@@ -99,14 +111,18 @@ blk_generic_alloc_queue(int node_id)
 #endif
 {
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0))
+
 	struct request_queue *q = blk_alloc_queue(GFP_KERNEL);
 	if (q != NULL)
 		blk_queue_make_request(q, make_request);
 
+	//printk(KERN_ALERT"my linux version is smaller than 5.7.0");
 	return (q);
 #elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0))
+	//printk(KERN_ALERT"my linux version is smaller than 5.9.0 and bigger than 5.7.0");
 	return (blk_alloc_queue(make_request, node_id));
 #else
+	//printk(KERN_ALERT"my linux version is bigger than 5.9.0");
 	return (blk_alloc_queue(node_id));
 #endif
 }
@@ -117,6 +133,7 @@ blk_generic_alloc_queue(int node_id)
 static void sbull_transfer(struct sbull_dev *dev, unsigned long sector,
 		unsigned long nsect, char *buffer, int write)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	unsigned long offset = sector*KERNEL_SECTOR_SIZE;
 	unsigned long nbytes = nsect*KERNEL_SECTOR_SIZE;
 
@@ -128,6 +145,7 @@ static void sbull_transfer(struct sbull_dev *dev, unsigned long sector,
 		memcpy(dev->data + offset, buffer, nbytes);
 	else
 		memcpy(buffer, dev->data + offset, nbytes);
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 }
 
 /*
@@ -136,6 +154,7 @@ static void sbull_transfer(struct sbull_dev *dev, unsigned long sector,
 //static void sbull_request(struct request_queue *q)
 static blk_status_t sbull_request(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data* bd)   /* For blk-mq */
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct request *req = bd->rq;
 	struct sbull_dev *dev = req->rq_disk->private_data;
         struct bio_vec bvec;
@@ -154,7 +173,7 @@ static blk_status_t sbull_request(struct blk_mq_hw_ctx *hctx, const struct blk_m
 	rq_for_each_segment(bvec, req, iter)
 	{
 		size_t num_sector = blk_rq_cur_sectors(req);
-		printk (KERN_NOTICE "Req dev %u dir %d sec %lld, nr %ld\n",
+		printk (KERN_NOTICE "Req dev %u, request_data_direct %d, pos_sector %lld, num_sector %ld\n",
                         (unsigned)(dev - Devices), rq_data_dir(req),
                         pos_sector, num_sector);
 		buffer = page_address(bvec.bv_page) + bvec.bv_offset;
@@ -165,6 +184,7 @@ static blk_status_t sbull_request(struct blk_mq_hw_ctx *hctx, const struct blk_m
 	ret = BLK_STS_OK;
 done:
 	blk_mq_end_request (req, ret);
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return ret;
 }
 
@@ -174,6 +194,7 @@ done:
  */
 static int sbull_xfer_bio(struct sbull_dev *dev, struct bio *bio)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct bio_vec bvec;
 	struct bvec_iter iter;
 	sector_t sector = bio->bi_iter.bi_sector;
@@ -190,6 +211,7 @@ static int sbull_xfer_bio(struct sbull_dev *dev, struct bio *bio)
 		//__bio_kunmap_atomic(buffer, KM_USER0);
 		kunmap_atomic(buffer);
 	}
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return 0; /* Always "succeed" */
 }
 
@@ -198,6 +220,7 @@ static int sbull_xfer_bio(struct sbull_dev *dev, struct bio *bio)
  */
 static int sbull_xfer_request(struct sbull_dev *dev, struct request *req)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct bio *bio;
 	int nsect = 0;
     
@@ -206,6 +229,7 @@ static int sbull_xfer_request(struct sbull_dev *dev, struct request *req)
 		//nsect += bio->bi_size/KERNEL_SECTOR_SIZE;
 		nsect += bio->bi_iter.bi_size/KERNEL_SECTOR_SIZE;
 	}
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return nsect;
 }
 
@@ -217,6 +241,7 @@ static int sbull_xfer_request(struct sbull_dev *dev, struct request *req)
 //static void sbull_full_request(struct request_queue *q)
 static blk_status_t sbull_full_request(struct blk_mq_hw_ctx * hctx, const struct blk_mq_queue_data * bd)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct request *req = bd->rq;
 	int sectors_xferred;
 	//struct sbull_dev *dev = q->queuedata;
@@ -239,6 +264,7 @@ static blk_status_t sbull_full_request(struct blk_mq_hw_ctx * hctx, const struct
 		//__blk_end_request(req, 0, sectors_xferred);
 		blk_mq_end_request (req, ret);
 	//}
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return ret;
 }
 
@@ -254,6 +280,7 @@ static blk_qc_t sbull_make_request(struct request_queue *q, struct bio *bio)
 static blk_qc_t sbull_make_request(struct bio *bio)
 #endif
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	//struct sbull_dev *dev = q->queuedata;
 	struct sbull_dev *dev = bio->bi_disk->private_data;
 	int status;
@@ -261,6 +288,7 @@ static blk_qc_t sbull_make_request(struct bio *bio)
 	status = sbull_xfer_bio(dev, bio);
 	bio->bi_status = status;
 	bio_endio(bio);
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return BLK_QC_T_NONE;
 }
 
@@ -271,6 +299,7 @@ static blk_qc_t sbull_make_request(struct bio *bio)
 
 static int sbull_open(struct block_device *bdev, fmode_t mode)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct sbull_dev *dev = bdev->bd_disk->private_data;
 
 	del_timer_sync(&dev->timer);
@@ -297,14 +326,17 @@ static int sbull_open(struct block_device *bdev, fmode_t mode)
 	}
 	dev->users++;
 	spin_unlock(&dev->lock);
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return 0;
 }
 
 static void sbull_release(struct gendisk *disk, fmode_t mode)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct sbull_dev *dev = disk->private_data;
 
 	spin_lock(&dev->lock);
+	printk(KERN_ALERT"%s() spin_lock locked!",__func__);
 	dev->users--;
 
 	if (!dev->users) {
@@ -312,6 +344,8 @@ static void sbull_release(struct gendisk *disk, fmode_t mode)
 		add_timer(&dev->timer);
 	}
 	spin_unlock(&dev->lock);
+	printk(KERN_ALERT"%s() spin_lock unlocked!",__func__);
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 }
 
 /*
@@ -319,8 +353,10 @@ static void sbull_release(struct gendisk *disk, fmode_t mode)
  */
 int sbull_media_changed(struct gendisk *gd)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct sbull_dev *dev = gd->private_data;
 	
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return dev->media_change;
 }
 
@@ -330,12 +366,14 @@ int sbull_media_changed(struct gendisk *gd)
  */
 int sbull_revalidate(struct gendisk *gd)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct sbull_dev *dev = gd->private_data;
 	
 	if (dev->media_change) {
 		dev->media_change = 0;
 		memset (dev->data, 0, dev->size);
 	}
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return 0;
 }
 
@@ -346,10 +384,12 @@ int sbull_revalidate(struct gendisk *gd)
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)) && !defined(timer_setup)
 void sbull_invalidate(unsigned long ldev)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
         struct sbull_dev *dev = (struct sbull_dev *) ldev;
 #else
 void sbull_invalidate(struct timer_list * ldev)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
         struct sbull_dev *dev = from_timer(dev, ldev, timer);
 #endif
 
@@ -359,6 +399,7 @@ void sbull_invalidate(struct timer_list * ldev)
 	else
 		dev->media_change = 1;
 	spin_unlock(&dev->lock);
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 }
 
 /*
@@ -368,6 +409,7 @@ void sbull_invalidate(struct timer_list * ldev)
 int sbull_ioctl (struct block_device *bdev, fmode_t mode,
                  unsigned int cmd, unsigned long arg)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	long size;
 	struct hd_geometry geo;
 	struct sbull_dev *dev = bdev->bd_disk->private_data;
@@ -390,6 +432,7 @@ int sbull_ioctl (struct block_device *bdev, fmode_t mode,
 		return 0;
 	}
 
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return -ENOTTY; /* unknown command */
 }
 
@@ -425,6 +468,7 @@ static struct blk_mq_ops mq_ops_full = {
  */
 static void setup_device(struct sbull_dev *dev, int which)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	/*
 	 * Get some memory.
 	 */
@@ -481,6 +525,11 @@ static void setup_device(struct sbull_dev *dev, int which)
 		dev->queue = blk_mq_init_sq_queue(&dev->tag_set, &mq_ops_simple, 128, BLK_MQ_F_SHOULD_MERGE);
 		if (dev->queue == NULL)
 			goto out_vfree;
+	    case RM_MQ:
+		printk(KERN_ALERT"cyf two-level multi-queue mode has been choosed...");
+		/*
+		 *TO DO:
+		 */
 		break;
 	}
 	blk_queue_logical_block_size(dev->queue, hardsect_size);
@@ -501,6 +550,7 @@ static void setup_device(struct sbull_dev *dev, int which)
 	snprintf (dev->gd->disk_name, 32, "sbull%c", which + 'a');
 	set_capacity(dev->gd, nsectors*(hardsect_size/KERNEL_SECTOR_SIZE));
 	add_disk(dev->gd);
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return;
 
   out_vfree:
@@ -512,6 +562,7 @@ static void setup_device(struct sbull_dev *dev, int which)
 
 static int __init sbull_init(void)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	int i;
 	/*
 	 * Get registered.
@@ -530,17 +581,19 @@ static int __init sbull_init(void)
 	for (i = 0; i < ndevices; i++) 
 		setup_device(Devices + i, i);
     
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return 0;
 
   out_unregister:
+	printk(KERN_ALERT"%s() out register! The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	unregister_blkdev(sbull_major, "sbd");
 	return -ENOMEM;
 }
 
 static void sbull_exit(void)
 {
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	int i;
-
 	for (i = 0; i < ndevices; i++) {
 		struct sbull_dev *dev = Devices + i;
 
@@ -561,6 +614,7 @@ static void sbull_exit(void)
 	}
 	unregister_blkdev(sbull_major, "sbull");
 	kfree(Devices);
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 }
 	
 module_init(sbull_init);
