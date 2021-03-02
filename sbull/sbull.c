@@ -78,18 +78,32 @@ struct funny_mud_pee;
 /*
  * The internal representation of our device.
  */
+
+struct sbull_hw_queue_private {
+	unsigned int index;
+	unsigned int queue_depth;
+	struct sbull_dev *dev;
+};
+
 struct sbull_dev {
         int size;                       /* Device size in sectors */
         u8 *data;                       /* The data array */
         short users;                    /* How many users */
         spinlock_t lock;                /* For mutual exclusion */
-	struct blk_mq_tag_set tag_set;	/* tag_set added */
+	spinlock_t hardware_queue_lock;
+	//注意request_queue 这个结构体内部既包含了软队列指针也包含了硬队列指针
+	//这是个大结构体
+	//linux 5.4 源码
         struct request_queue *queue;    /* The device request queue */
-	
-	//notice that the gendisk has only one request queue
-        struct gendisk *gd;             /* The gendisk structure */
+	/*
+	 *blk_mq_tag_set data struct is for kernel to manage the request-queue. Driver decides how many hw-queues will be created because driver know the HW. If HW supported two channel IO processing, driver would create two hw-queues. And driver stores the number of hw-queue and other information into blk_mq_tag_set object.
+	 * */
+	struct blk_mq_tag_set tag_set;	/* tag_set added */
 	unsigned int queue_depth;	
-        
+        struct sbull_hw_queue_private *hw_queue_priv;
+	
+        struct gendisk *gd;             /* The gendisk structure */
+
 	short media_change;             /* Flag a media change? */
         struct timer_list timer;        /* For simulated media changes */
 };
@@ -462,6 +476,30 @@ static struct blk_mq_ops mq_ops_full = {
     .queue_rq = sbull_full_request,
 };
 
+static  blk_status_t sbull_queue_rq(struct blk_mq_hw_ctx *hctx,
+			  const struct blk_mq_queue_data *bd)
+{
+	return 0;
+}
+
+static int sbull_init_hctx(struct blk_mq_hw_ctx *hctx,
+			   void *data,
+			   unsigned int index)
+{
+	return 0;
+}
+
+static void sbull_softirq_done_fn(struct request *req)
+{
+	return ;
+}
+
+static struct blk_mq_ops sbull_mq_ops = {
+	.queue_rq = sbull_queue_rq,
+	.init_hctx = sbull_init_hctx,
+	.complete = sbull_softirq_done_fn,
+};
+
 
 /*
  * Set up our internal device.
@@ -500,11 +538,9 @@ static void setup_device(struct sbull_dev *dev, int which)
 	 */
 	switch (request_mode) {
 	    case RM_NOQUEUE:
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0))
-		dev->queue =  blk_generic_alloc_queue(sbull_make_request, NUMA_NO_NODE);
-#else
-		dev->queue =  blk_generic_alloc_queue(NUMA_NO_NODE);
-#endif
+		dev->queue = blk_alloc_queue(GFP_KERNEL);
+		if (dev->queue != NULL)
+			blk_queue_make_request(dev->queue, sbull_make_request);
 		if (dev->queue == NULL)
 			goto out_vfree;
 		break;
@@ -527,13 +563,29 @@ static void setup_device(struct sbull_dev *dev, int which)
 			goto out_vfree;
 	    case RM_MQ:
 		printk(KERN_ALERT"cyf two-level multi-queue mode has been choosed...");
-		/*
-		 *TO DO:
-		 */
+		dev->queue_depth = hw_queue_depth;
+		//TO DO:手工设置tag_set
+
+		dev->tag_set.queue_depth = hw_queue_depth;
+		dev->tag_set.nr_hw_queues = nr_hw_queues;
+		//TO DO:注册回调函数，在tag_set里设置callback
+
+
+
+		blk_mq_alloc_tag_set(&dev->tag_set);
+		//TO DO:错误检查
+
+		dev->queue = blk_mq_init_queue(&dev->tag_set);
+		//TO DO:错误检查
+
 		break;
 	}
 	blk_queue_logical_block_size(dev->queue, hardsect_size);
 	dev->queue->queuedata = dev;
+	//TO DO:
+	
+
+
 	/*
 	 * And the gendisk structure.
 	 */
