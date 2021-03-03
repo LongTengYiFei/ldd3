@@ -476,7 +476,8 @@ static struct blk_mq_ops mq_ops_full = {
     .queue_rq = sbull_full_request,
 };
 
-static  blk_status_t sbull_queue_rq(struct blk_mq_hw_ctx *hctx,
+//queue_rq_fn
+static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx,
 			  const struct blk_mq_queue_data *bd)
 {
 	return 0;
