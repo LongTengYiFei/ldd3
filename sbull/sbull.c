@@ -165,8 +165,8 @@ static void sbull_transfer(struct sbull_dev *dev, unsigned long sector,
 /*
  * The simple form of the request function.
  */
-//static void sbull_request(struct request_queue *q)
-static blk_status_t sbull_request(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data* bd)   /* For blk-mq */
+//static void sbull_simple_request(struct request_queue *q)
+static blk_status_t sbull_simple_request(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data* bd)   /* For blk-mq */
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct request *req = bd->rq;
@@ -469,7 +469,7 @@ static struct block_device_operations sbull_ops = {
 };
 
 static struct blk_mq_ops mq_ops_simple = {
-    .queue_rq = sbull_request,
+    .queue_rq = sbull_simple_request,
 };
 
 static struct blk_mq_ops mq_ops_full = {
@@ -496,7 +496,7 @@ static void sbull_softirq_done_fn(struct request *req)
 }
 
 static struct blk_mq_ops sbull_mq_ops = {
-	.queue_rq = sbull_queue_rq,
+	.queue_rq = sbull_mq_request,
 	.init_hctx = sbull_init_hctx,
 	.complete = sbull_softirq_done_fn,
 };
@@ -558,7 +558,7 @@ static void setup_device(struct sbull_dev *dev, int which)
         	/* fall into.. */
 	
 	    case RM_SIMPLE:
-		//dev->queue = blk_init_queue(sbull_request, &dev->lock);
+		//dev->queue = blk_init_queue(sbull_simple_request, &dev->lock);
 		dev->queue = blk_mq_init_sq_queue(&dev->tag_set, &mq_ops_simple, 128, BLK_MQ_F_SHOULD_MERGE);
 		if (dev->queue == NULL)
 			goto out_vfree;
