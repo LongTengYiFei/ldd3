@@ -49,7 +49,7 @@ enum {
 	RM_NOQUEUE = 2,	/* Use make_request */
 	RM_MQ = 3,/* cyf two-level multi-queue mode*/
 };
-static int request_mode = RM_NOQUEUE;
+static int request_mode = RM_MQ;
 module_param(request_mode, int, 0);
 
 struct funny_mud_pee;
