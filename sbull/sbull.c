@@ -475,10 +475,26 @@ static struct blk_mq_ops mq_ops_full = {
     .queue_rq = sbull_full_request,
 };
 
-//queue_rq_fn
 static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data *bd)
 {
-	return 0;
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+	struct request *req = bd->rq;
+	int sectors_xferred;
+	struct sbull_dev *dev = req->q->queuedata;
+	blk_status_t  ret;
+
+	blk_mq_start_request (req);
+	if (blk_rq_is_passthrough(req)) {
+		printk (KERN_NOTICE "Skip non-fs request\n");
+		ret = BLK_STS_IOERR; //-EIO;
+		goto done;
+	}
+	sectors_xferred = sbull_xfer_request(dev, req);
+	ret = BLK_STS_OK; 
+	done:
+		blk_mq_end_request (req, ret);
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+	return ret;
 }
 
 static int sbull_init_hctx(struct blk_mq_hw_ctx *hctx, void *data, unsigned int index)
@@ -495,12 +511,14 @@ static void sbull_softirq_done_fn(struct request *req)
 //这个返回值应该是硬件队列的下标
 //这里直接返回0，反正只有一个硬队列
 //内核源码 ：typedef int (map_queues_fn)(struct blk_mq_tag_set *set);
-static int sbull_map_queues(struct blk_mq_tag_set *set){
+static int sbull_map_queues(struct blk_mq_tag_set *set)
+{
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return 0;	
 }
 
 static struct blk_mq_ops sbull_mq_ops = {
-	.queue_rq = sbull_full_request,//不同模式的请求队列处理函数参数都是一样的
+	.queue_rq = sbull_mq_request,//不同模式的请求队列处理函数参数都是一样的
 	.map_queues = sbull_map_queues,
 };
 
