@@ -9,7 +9,6 @@
    blk-mq and kernels >= 5.0
 */
 
-
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/init.h>
@@ -477,15 +476,12 @@ static struct blk_mq_ops mq_ops_full = {
 };
 
 //queue_rq_fn
-static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx,
-			  const struct blk_mq_queue_data *bd)
+static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data *bd)
 {
 	return 0;
 }
 
-static int sbull_init_hctx(struct blk_mq_hw_ctx *hctx,
-			   void *data,
-			   unsigned int index)
+static int sbull_init_hctx(struct blk_mq_hw_ctx *hctx, void *data, unsigned int index)
 {
 	return 0;
 }
@@ -495,10 +491,17 @@ static void sbull_softirq_done_fn(struct request *req)
 	return ;
 }
 
+//linux 5.4 里面定义的是接收blk_mq_tag_set指针作为参数，然后返回整数
+//这个返回值应该是硬件队列的下标
+//这里直接返回0，反正只有一个硬队列
+//内核源码 ：typedef int (map_queues_fn)(struct blk_mq_tag_set *set);
+static int sbull_map_queues(struct blk_mq_tag_set *set){
+	return 0;	
+}
+
 static struct blk_mq_ops sbull_mq_ops = {
-	.queue_rq = sbull_mq_request,
-	.init_hctx = sbull_init_hctx,
-	.complete = sbull_softirq_done_fn,
+	.queue_rq = sbull_full_request,//不同模式的请求队列处理函数参数都是一样的
+	.map_queues = sbull_map_queues,
 };
 
 
@@ -564,25 +567,32 @@ static void setup_device(struct sbull_dev *dev, int which)
 			goto out_vfree;
 	    case RM_MQ:
 		printk(KERN_ALERT"cyf two-level multi-queue mode has been choosed...");
+	
 		dev->queue_depth = hw_queue_depth;
-		//TO DO:手工设置tag_set
-
-		dev->tag_set.queue_depth = hw_queue_depth;
+		
+		dev->tag_set.ops = &sbull_mq_ops;
 		dev->tag_set.nr_hw_queues = nr_hw_queues;
-		//TO DO:注册回调函数，在tag_set里设置callback
+		dev->tag_set.queue_depth = hw_queue_depth;
+		dev->tag_set.numa_node = NUMA_NO_NODE;
+		dev->tag_set.cmd_size = sizeof(struct sbull_dev);
+		dev->tag_set.flags = BLK_MQ_F_SHOULD_MERGE;
+		dev->tag_set.driver_data = dev;
 
+		if(blk_mq_alloc_tag_set(&dev->tag_set)){
+			printk(KERN_ALERT"amazing, tag_set set failure!");
+			goto out_vfree;
+		}
 
-
-		blk_mq_alloc_tag_set(&dev->tag_set);
-		//TO DO:错误检查
 
 		dev->queue = blk_mq_init_queue(&dev->tag_set);
-		//TO DO:错误检查
+		if(dev->queue == NULL)
+			goto out_vfree;
 
 		break;
 	}
+	
 	blk_queue_logical_block_size(dev->queue, hardsect_size);
-	dev->queue->queuedata = dev;
+	dev->queue->queuedata = dev;//queuedata 是void类型指针
 	//TO DO:
 	
 
