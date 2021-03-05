@@ -161,45 +161,6 @@ static void sbull_transfer(struct sbull_dev *dev, unsigned long sector,
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 }
 
-/*
- * The simple form of the request function.
- */
-//static void sbull_simple_request(struct request_queue *q)
-static blk_status_t sbull_simple_request(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data* bd)   /* For blk-mq */
-{
-	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-	struct request *req = bd->rq;
-	struct sbull_dev *dev = req->rq_disk->private_data;
-        struct bio_vec bvec;
-        struct req_iterator iter;
-        sector_t pos_sector = blk_rq_pos(req);
-	void	*buffer;
-	blk_status_t  ret;
-
-	blk_mq_start_request (req);
-
-	if (blk_rq_is_passthrough(req)) {
-		printk (KERN_NOTICE "Skip non-fs request\n");
-                ret = BLK_STS_IOERR;  //-EIO
-			goto done;
-	}
-	rq_for_each_segment(bvec, req, iter)
-	{
-		size_t num_sector = blk_rq_cur_sectors(req);
-		printk (KERN_NOTICE "Req dev %u, request_data_direct %d, pos_sector %lld, num_sector %ld\n",
-                        (unsigned)(dev - Devices), rq_data_dir(req),
-                        pos_sector, num_sector);
-		buffer = page_address(bvec.bv_page) + bvec.bv_offset;
-		sbull_transfer(dev, pos_sector, num_sector,
-				buffer, rq_data_dir(req) == WRITE);
-		pos_sector += num_sector;
-	}
-	ret = BLK_STS_OK;
-done:
-	blk_mq_end_request (req, ret);
-	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-	return ret;
-}
 
 
 /*
@@ -246,6 +207,45 @@ static int sbull_xfer_request(struct sbull_dev *dev, struct request *req)
 	return nsect;
 }
 
+/*
+ * The simple form of the request function.
+ */
+//static void sbull_simple_request(struct request_queue *q)
+static blk_status_t sbull_simple_request(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data* bd)   /* For blk-mq */
+{
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+	struct request *req = bd->rq;
+	struct sbull_dev *dev = req->rq_disk->private_data;
+        struct bio_vec bvec;
+        struct req_iterator iter;
+        sector_t pos_sector = blk_rq_pos(req);
+	void	*buffer;
+	blk_status_t  ret;
+
+	blk_mq_start_request (req);
+
+	if (blk_rq_is_passthrough(req)) {
+		printk (KERN_NOTICE "Skip non-fs request\n");
+                ret = BLK_STS_IOERR;  //-EIO
+			goto done;
+	}
+	rq_for_each_segment(bvec, req, iter)
+	{
+		size_t num_sector = blk_rq_cur_sectors(req);
+		printk (KERN_NOTICE "Req dev %u, request_data_direct %d, pos_sector %lld, num_sector %ld\n",
+                        (unsigned)(dev - Devices), rq_data_dir(req),
+                        pos_sector, num_sector);
+		buffer = page_address(bvec.bv_page) + bvec.bv_offset;
+		sbull_transfer(dev, pos_sector, num_sector,
+				buffer, rq_data_dir(req) == WRITE);
+		pos_sector += num_sector;
+	}
+	ret = BLK_STS_OK;
+done:
+	blk_mq_end_request (req, ret);
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+	return ret;
+}
 
 
 /*
@@ -306,6 +306,27 @@ static blk_qc_t sbull_make_request(struct bio *bio)
 }
 
 
+static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data *bd)
+{
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+	struct request *req = bd->rq;
+	int sectors_xferred;
+	struct sbull_dev *dev = req->q->queuedata;
+	blk_status_t  ret;
+
+	blk_mq_start_request (req);
+	if (blk_rq_is_passthrough(req)) {
+		printk (KERN_NOTICE "Skip non-fs request\n");
+		ret = BLK_STS_IOERR; //-EIO;
+		goto done;
+	}
+	sectors_xferred = sbull_xfer_request(dev, req);
+	ret = BLK_STS_OK; 
+	done:
+		blk_mq_end_request (req, ret);
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+	return ret;
+}
 /*
  * Open and close.
  */
@@ -475,37 +496,10 @@ static struct blk_mq_ops mq_ops_full = {
     .queue_rq = sbull_full_request,
 };
 
-static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data *bd)
-{
-	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-	struct request *req = bd->rq;
-	int sectors_xferred;
-	struct sbull_dev *dev = req->q->queuedata;
-	blk_status_t  ret;
-
-	blk_mq_start_request (req);
-	if (blk_rq_is_passthrough(req)) {
-		printk (KERN_NOTICE "Skip non-fs request\n");
-		ret = BLK_STS_IOERR; //-EIO;
-		goto done;
-	}
-	sectors_xferred = sbull_xfer_request(dev, req);
-	ret = BLK_STS_OK; 
-	done:
-		blk_mq_end_request (req, ret);
-	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-	return ret;
-}
-
-static int sbull_init_hctx(struct blk_mq_hw_ctx *hctx, void *data, unsigned int index)
-{
-	return 0;
-}
-
-static void sbull_softirq_done_fn(struct request *req)
-{
-	return ;
-}
+static struct blk_mq_ops sbull_mq_ops = {
+	.queue_rq = sbull_mq_request,//不同模式的请求队列处理函数参数都是一样的
+	.map_queues = sbull_map_queues,
+};
 
 //linux 5.4 里面定义的是接收blk_mq_tag_set指针作为参数，然后返回整数
 //这个返回值应该是硬件队列的下标
@@ -516,12 +510,6 @@ static int sbull_map_queues(struct blk_mq_tag_set *set)
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return 0;	
 }
-
-static struct blk_mq_ops sbull_mq_ops = {
-	.queue_rq = sbull_mq_request,//不同模式的请求队列处理函数参数都是一样的
-	.map_queues = sbull_map_queues,
-};
-
 
 /*
  * Set up our internal device.
@@ -552,8 +540,6 @@ static void setup_device(struct sbull_dev *dev, int which)
         timer_setup(&dev->timer, sbull_invalidate, 0);
 #endif
 
-
-	
 	/*
 	 * The I/O queue, depending on whether we are using our own
 	 * make_request function or not.
@@ -611,10 +597,6 @@ static void setup_device(struct sbull_dev *dev, int which)
 	
 	blk_queue_logical_block_size(dev->queue, hardsect_size);
 	dev->queue->queuedata = dev;//queuedata 是void类型指针
-	//TO DO:
-	
-
-
 	/*
 	 * And the gendisk structure.
 	 */
@@ -638,8 +620,6 @@ static void setup_device(struct sbull_dev *dev, int which)
 	if (dev->data)
 		vfree(dev->data);
 }
-
-
 
 static int __init sbull_init(void)
 {
