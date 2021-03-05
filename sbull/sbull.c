@@ -471,6 +471,15 @@ int sbull_ioctl (struct block_device *bdev, fmode_t mode,
 }
 
 
+//linux 5.4 里面定义的是接收blk_mq_tag_set指针作为参数，然后返回整数
+//这个返回值应该是硬件队列的下标
+//这里直接返回0，反正只有一个硬队列
+//内核源码 ：typedef int (map_queues_fn)(struct blk_mq_tag_set *set);
+static int sbull_map_queues(struct blk_mq_tag_set *set)
+{
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+	return 0;	
+}
 
 /*
  * The device operations structure.
@@ -501,15 +510,6 @@ static struct blk_mq_ops sbull_mq_ops = {
 	.map_queues = sbull_map_queues,
 };
 
-//linux 5.4 里面定义的是接收blk_mq_tag_set指针作为参数，然后返回整数
-//这个返回值应该是硬件队列的下标
-//这里直接返回0，反正只有一个硬队列
-//内核源码 ：typedef int (map_queues_fn)(struct blk_mq_tag_set *set);
-static int sbull_map_queues(struct blk_mq_tag_set *set)
-{
-	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-	return 0;	
-}
 
 /*
  * Set up our internal device.
