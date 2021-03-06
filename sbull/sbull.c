@@ -163,12 +163,6 @@ static void sbull_transfer(struct sbull_dev *dev, unsigned long sector_index,
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 }
 
-static void show_func_begin_messege(void ){
-	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-}
-static void show_func_over_messege(void ){
-	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-}
 
 //转发至真实的磁盘分区
 //暂时保证和sbull_transfer的参数列表不变:
