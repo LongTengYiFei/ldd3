@@ -144,35 +144,36 @@ blk_generic_alloc_queue(int node_id)
  * Handle an I/O request.
  */
 //这个是转发至dev里面的数组，也就是内存，vmalloc
-static void sbull_transfer(struct sbull_dev *dev, unsigned long sector,
-		unsigned long nsect, char *buffer, int write)
+static void sbull_transfer(struct sbull_dev *dev, unsigned long sector_index,
+		unsigned long sect_count, char *buffer, int write)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-	unsigned long offset = sector*KERNEL_SECTOR_SIZE;
-	unsigned long nbytes = nsect*KERNEL_SECTOR_SIZE;
+	
+	unsigned long dev_offset = sector_index*KERNEL_SECTOR_SIZE;
+	unsigned long byte_count = sect_count*KERNEL_SECTOR_SIZE;
 
-	if ((offset + nbytes) > dev->size) {
-		printk (KERN_NOTICE "Beyond-end write (%ld %ld)\n", offset, nbytes);
+	if ((dev_offset + byte_count) > dev->size) {
+		printk (KERN_NOTICE "Beyond-end write (%ld %ld)\n", dev_offset, byte_count);
 		return;
 	}
 	if (write)
-		memcpy(dev->data + offset, buffer, nbytes);
+		memcpy(dev->data + dev_offset, buffer, byte_count);
 	else
-		memcpy(buffer, dev->data + offset, nbytes);
+		memcpy(buffer, dev->data + dev_offset, byte_count);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 }
 
-void show_func_begin_messege(){
+static void show_func_begin_messege(void ){
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 }
-void show_fun_over_messege(){
+static void show_func_over_messege(void ){
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 }
 
 //转发至真实的磁盘分区
 //暂时保证和sbull_transfer的参数列表不变:
 static void sbull_transfer_Real_disk_part(struct sbull_dev *dev, unsigned long sector,
-		unsigned long nsect, char *buffer, int write)
+		unsigned long sect_count, char *buffer, int write)
 {
 	return ;
 }
@@ -210,15 +211,15 @@ static int sbull_xfer_request(struct sbull_dev *dev, struct request *req)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct bio *bio;
-	int nsect = 0;
+	int sect_count = 0;
     
 	__rq_for_each_bio(bio, req) {
 		sbull_xfer_bio(dev, bio);
-		//nsect += bio->bi_size/KERNEL_SECTOR_SIZE;
-		nsect += bio->bi_iter.bi_size/KERNEL_SECTOR_SIZE;
+		//sect_count += bio->bi_size/KERNEL_SECTOR_SIZE;
+		sect_count += bio->bi_iter.bi_size/KERNEL_SECTOR_SIZE;
 	}
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-	return nsect;
+	return sect_count;
 }
 
 /*
