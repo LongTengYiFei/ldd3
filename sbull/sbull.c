@@ -143,6 +143,7 @@ blk_generic_alloc_queue(int node_id)
 /*
  * Handle an I/O request.
  */
+//这个是转发至dev里面的数组，也就是内存，vmalloc
 static void sbull_transfer(struct sbull_dev *dev, unsigned long sector,
 		unsigned long nsect, char *buffer, int write)
 {
@@ -161,7 +162,20 @@ static void sbull_transfer(struct sbull_dev *dev, unsigned long sector,
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 }
 
+void show_func_begin_messege(){
+	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+}
+void show_fun_over_messege(){
+	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+}
 
+//转发至真实的磁盘分区
+//暂时保证和sbull_transfer的参数列表不变:
+static void sbull_transfer_Real_disk_part(struct sbull_dev *dev, unsigned long sector,
+		unsigned long nsect, char *buffer, int write)
+{
+	return ;
+}
 
 /*
  * Transfer a single BIO.
