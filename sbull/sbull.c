@@ -129,13 +129,10 @@ blk_generic_alloc_queue(int node_id)
 	if (q != NULL)
 		blk_queue_make_request(q, make_request);
 
-	//printk(KERN_ALERT"my linux version is smaller than 5.7.0");
 	return (q);
 #elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0))
-	//printk(KERN_ALERT"my linux version is smaller than 5.9.0 and bigger than 5.7.0");
 	return (blk_alloc_queue(make_request, node_id));
 #else
-	//printk(KERN_ALERT"my linux version is bigger than 5.9.0");
 	return (blk_alloc_queue(node_id));
 #endif
 }
@@ -184,14 +181,10 @@ static int sbull_xfer_bio(struct sbull_dev *dev, struct bio *bio)
 
 	/* Do each segment independently. */
 	bio_for_each_segment(bvec, bio, iter) {
-		//char *buffer = __bio_kmap_atomic(bio, i, KM_USER0);
 		char *buffer = kmap_atomic(bvec.bv_page) + bvec.bv_offset;
-		//sbull_transfer(dev, sector, bio_cur_bytes(bio) >> 9,
 		sbull_transfer(dev, sector, (bio_cur_bytes(bio) / KERNEL_SECTOR_SIZE),
 				buffer, bio_data_dir(bio) == WRITE);
-		//sector += bio_cur_bytes(bio) >> 9;
 		sector += (bio_cur_bytes(bio) / KERNEL_SECTOR_SIZE);
-		//__bio_kunmap_atomic(buffer, KM_USER0);
 		kunmap_atomic(buffer);
 	}
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
@@ -209,7 +202,6 @@ static int sbull_xfer_request(struct sbull_dev *dev, struct request *req)
     
 	__rq_for_each_bio(bio, req) {
 		sbull_xfer_bio(dev, bio);
-		//sect_count += bio->bi_size/KERNEL_SECTOR_SIZE;
 		sect_count += bio->bi_iter.bi_size/KERNEL_SECTOR_SIZE;
 	}
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
@@ -266,26 +258,19 @@ static blk_status_t sbull_full_request(struct blk_mq_hw_ctx * hctx, const struct
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct request *req = bd->rq;
 	int sectors_xferred;
-	//struct sbull_dev *dev = q->queuedata;
 	struct sbull_dev *dev = req->q->queuedata;
 	blk_status_t  ret;
 
 	blk_mq_start_request (req);
-	//while ((req = blk_fetch_request(q)) != NULL) {
-		//if (req->cmd_type != REQ_TYPE_FS) {
 		if (blk_rq_is_passthrough(req)) {
 			printk (KERN_NOTICE "Skip non-fs request\n");
-			//__blk_end_request(req, -EIO, blk_rq_cur_bytes(req));
 			ret = BLK_STS_IOERR; //-EIO;
-			//continue;
 			goto done;
 		}
 		sectors_xferred = sbull_xfer_request(dev, req);
 		ret = BLK_STS_OK; 
 	done:
-		//__blk_end_request(req, 0, sectors_xferred);
 		blk_mq_end_request (req, ret);
-	//}
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return ret;
 }
@@ -303,7 +288,6 @@ static blk_qc_t sbull_make_request(struct bio *bio)
 #endif
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-	//struct sbull_dev *dev = q->queuedata;
 	struct sbull_dev *dev = bio->bi_disk->private_data;
 	int status;
 
@@ -346,7 +330,6 @@ static int sbull_open(struct block_device *bdev, fmode_t mode)
 	struct sbull_dev *dev = bdev->bd_disk->private_data;
 
 	del_timer_sync(&dev->timer);
-	//filp->private_data = dev;
 	spin_lock(&dev->lock);
 	if (! dev->users) 
 	{
@@ -563,7 +546,6 @@ static void setup_device(struct sbull_dev *dev, int which)
 		break;
 
 	    case RM_FULL:
-		//dev->queue = blk_init_queue(sbull_full_request, &dev->lock);
 		dev->queue = blk_mq_init_sq_queue(&dev->tag_set, &mq_ops_full, 128, BLK_MQ_F_SHOULD_MERGE);
 		if (dev->queue == NULL)
 			goto out_vfree;
@@ -574,7 +556,6 @@ static void setup_device(struct sbull_dev *dev, int which)
         	/* fall into.. */
 	
 	    case RM_SIMPLE:
-		//dev->queue = blk_init_queue(sbull_simple_request, &dev->lock);
 		dev->queue = blk_mq_init_sq_queue(&dev->tag_set, &mq_ops_simple, 128, BLK_MQ_F_SHOULD_MERGE);
 		if (dev->queue == NULL)
 			goto out_vfree;
