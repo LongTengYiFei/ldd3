@@ -83,7 +83,7 @@ struct sbull_hw_queue_private {
 	unsigned int queue_depth;
 	struct sbull_dev *dev;
 };
-
+//sbull用内部的一个数据结构表示
 struct sbull_dev {
         int size;                       /* Device size in sectors */
         u8 *data;                       /* The data array */
@@ -202,6 +202,7 @@ static int sbull_xfer_request(struct sbull_dev *dev, struct request *req)
     
 	__rq_for_each_bio(bio, req) {
 		sbull_xfer_bio(dev, bio);
+		//printk(KERN_ALERT"the bi_size is %d", bio->bi_iter.bi_size);
 		sect_count += bio->bi_iter.bi_size/KERNEL_SECTOR_SIZE;
 	}
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
@@ -512,6 +513,7 @@ static void setup_device(struct sbull_dev *dev, int which)
 	/*
 	 * Get some memory.
 	 */
+
 	memset (dev, 0, sizeof (struct sbull_dev));
 	dev->size = nsectors*hardsect_size;
 	dev->data = vmalloc(dev->size);
@@ -615,20 +617,29 @@ static int __init sbull_init(void)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	int i;
-	/*
-	 * Get registered.
-	 */
+	//向内核注册自己
+	//如果传入的参数是0，内核将返还新的主设备号
 	sbull_major = register_blkdev(sbull_major, "sbull");
+	printk(KERN_NOTICE"get new major number:%d", sbull_major);	
+	
+	//如果返回负值，则表示出现了错误
+	//书上写的负值，但是这里却包括了0
 	if (sbull_major <= 0) {
 		printk(KERN_WARNING "sbull: unable to get major number\n");
-		return -EBUSY;
+		return -EBUSY;//device or resource busy
+		//EBUSY是一个宏定义，是16
+		//这里返回的也就是-16
 	}
 	/*
 	 * Allocate the device array, and initialize each one.
 	 */
+	//kmalloc is the normal method of allocating memory for objects smaller than page size in the kernel.
+	//GFP_KERNEL - Allocate normal kernel ram. May sleep.
 	Devices = kmalloc(ndevices*sizeof (struct sbull_dev), GFP_KERNEL);
 	if (Devices == NULL)
 		goto out_unregister;
+	
+	//循环安装块设备
 	for (i = 0; i < ndevices; i++) 
 		setup_device(Devices + i, i);
     
@@ -637,8 +648,10 @@ static int __init sbull_init(void)
 
   out_unregister:
 	printk(KERN_ALERT"%s() out register! The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+	//注销块设备
+	//第二个参数是干啥的？
 	unregister_blkdev(sbull_major, "sbd");
-	return -ENOMEM;
+	return -ENOMEM;//out of memory 宏定义12
 }
 
 static void sbull_exit(void)
