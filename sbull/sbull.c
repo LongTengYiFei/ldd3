@@ -37,7 +37,7 @@ static int hardsect_size = 512;
 module_param(hardsect_size, int, 0);
 static int nsectors = 1024 * 20;	/* How big the drive is */
 module_param(nsectors, int, 0);
-static int ndevices = 1;
+static int ndevices = 3;
 module_param(ndevices, int, 0);
 
 /*
@@ -671,12 +671,20 @@ static void sbull_exit(void)
 				//kobject_put (&dev->queue->kobj);
 				blk_put_queue(dev->queue);
 			else
+				//删除块设备请求队列
 				blk_cleanup_queue(dev->queue);
 		}
+		//设备实际保存数据的数组是用vmalloc分配的
+		//所以用vfree
 		if (dev->data)
 			vfree(dev->data);
 	}
+	//注销设备
+	//这里的第二个参数怎么和init函数里的不一样？
 	unregister_blkdev(sbull_major, "sbull");
+	//模块退出时必须把初始化函数里面分配的内存全部释放！
+	//否则，linux重新启动后会发现之前的某些东西残留在系统里面
+	//Devices使用kmalloc分配的，所以使用kfree释放
 	kfree(Devices);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 }
