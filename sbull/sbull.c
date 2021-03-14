@@ -584,7 +584,7 @@ static void setup_device(struct sbull_dev *dev, int which)
 			goto out_vfree;
 		}
 
-
+		//tag set可以是多个队列共享的
 		dev->queue = blk_mq_init_queue(&dev->tag_set);
 		if(dev->queue == NULL)
 			goto out_vfree;
@@ -597,6 +597,7 @@ static void setup_device(struct sbull_dev *dev, int which)
 	/*
 	 * And the gendisk structure.
 	 */
+	//驱动程序不能自己初始化gendisk，必须调用alloc_disk
 	dev->gd = alloc_disk(SBULL_MINORS);
 	if (! dev->gd) {
 		printk (KERN_NOTICE "alloc_disk failure\n");
@@ -604,10 +605,10 @@ static void setup_device(struct sbull_dev *dev, int which)
 	}
 	dev->gd->major = sbull_major;
 	dev->gd->first_minor = which*SBULL_MINORS;
-	dev->gd->fops = &sbull_ops;
+	dev->gd->fops = &sbull_ops;//文件操作集合
 	dev->gd->queue = dev->queue;
 	dev->gd->private_data = dev;
-	snprintf (dev->gd->disk_name, 32, "sbull%c", which + 'a');
+	snprintf (dev->gd->disk_name, 32, "sbull%c", which + 'a');//名字
 	set_capacity(dev->gd, nsectors*(hardsect_size/KERNEL_SECTOR_SIZE));
 	add_disk(dev->gd);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
@@ -688,6 +689,8 @@ static void sbull_exit(void)
 				blk_put_queue(dev->queue);
 			else
 				//删除块设备请求队列
+				//把请求队列返还给系统
+				//调用这个函数后，驱动程序将不再得到这个队列的请求
 				blk_cleanup_queue(dev->queue);
 		}
 		//设备实际保存数据的数组是用vmalloc分配的
