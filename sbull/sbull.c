@@ -513,8 +513,10 @@ static void setup_device(struct sbull_dev *dev, int which)
 	/*
 	 * Get some memory.
 	 */
-
+	
 	memset (dev, 0, sizeof (struct sbull_dev));
+	//设备大小就是扇区数量乘扇区大小
+	//扇区数量和扇区大小都是全局变量
 	dev->size = nsectors*hardsect_size;
 	dev->data = vmalloc(dev->size);
 	if (dev->data == NULL) {
@@ -542,6 +544,8 @@ static void setup_device(struct sbull_dev *dev, int which)
 	    case RM_NOQUEUE:
 		dev->queue = blk_alloc_queue(GFP_KERNEL);
 		if (dev->queue != NULL)
+			//requset_queue	内部有个指向制造请求函数的指针
+			//这里其实就是注册回调函数
 			blk_queue_make_request(dev->queue, sbull_make_request);
 		if (dev->queue == NULL)
 			goto out_vfree;
@@ -561,18 +565,19 @@ static void setup_device(struct sbull_dev *dev, int which)
 		dev->queue = blk_mq_init_sq_queue(&dev->tag_set, &mq_ops_simple, 128, BLK_MQ_F_SHOULD_MERGE);
 		if (dev->queue == NULL)
 			goto out_vfree;
+
 	    case RM_MQ:
 		printk(KERN_ALERT"cyf two-level multi-queue mode has been choosed...");
 	
 		dev->queue_depth = hw_queue_depth;
-		
-		dev->tag_set.ops = &sbull_mq_ops;
-		dev->tag_set.nr_hw_queues = nr_hw_queues;
-		dev->tag_set.queue_depth = hw_queue_depth;
-		dev->tag_set.numa_node = NUMA_NO_NODE;
-		dev->tag_set.cmd_size = sizeof(struct sbull_dev);
+		//用于描述与存储器件相关的tag集合，抽象了存储器件的IO特征	
+		dev->tag_set.ops = &sbull_mq_ops;//一些函数指针
+		dev->tag_set.nr_hw_queues = nr_hw_queues;//硬队列数量
+		dev->tag_set.queue_depth = hw_queue_depth;//硬队列深度
+		dev->tag_set.numa_node = NUMA_NO_NODE;//宏定义-1
+		dev->tag_set.cmd_size = sizeof(struct sbull_dev);//每个请求的额外数据
 		dev->tag_set.flags = BLK_MQ_F_SHOULD_MERGE;
-		dev->tag_set.driver_data = dev;
+		dev->tag_set.driver_data = dev;//这是一个void类型的指针，每个请求的额外数据应该就是这个
 
 		if(blk_mq_alloc_tag_set(&dev->tag_set)){
 			printk(KERN_ALERT"amazing, tag_set set failure!");
@@ -607,7 +612,8 @@ static void setup_device(struct sbull_dev *dev, int which)
 	add_disk(dev->gd);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return;
-
+	
+	//dev->data是用vmalloc分配的
   out_vfree:
 	if (dev->data)
 		vfree(dev->data);
