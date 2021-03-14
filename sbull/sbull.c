@@ -654,6 +654,8 @@ static int __init sbull_init(void)
 	return -ENOMEM;//out of memory 宏定义12
 }
 
+//模块退出时必须把初始化函数里面分配的内存全部释放！
+//否则，linux重新启动后会发现之前的某些东西残留在系统里面
 static void sbull_exit(void)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
@@ -663,12 +665,20 @@ static void sbull_exit(void)
 
 		del_timer_sync(&dev->timer);
 		if (dev->gd) {
+			//卸载磁盘函数
+			//gendisk是一个引用计数结构，del_gendisk删除gendisk中的最终计数
 			del_gendisk(dev->gd);
+			//负责处理引用计数
+			//put_disk内部仍然是调用kobject_put(),这里不再赘述
 			put_disk(dev->gd);
 		}
 		if (dev->queue) {
 			if (request_mode == RM_NOQUEUE)
-				//kobject_put (&dev->queue->kobj);
+				//为什么要处理引用计数呢？
+				//blk_put_queue的定义很简单，就是调用kobject_put去处理queue里面的kobject对象
+				//kobject_put()
+				//Decrement refcount for object.
+				//Decrement the refcount, and if 0, call kobject_cleanup().
 				blk_put_queue(dev->queue);
 			else
 				//删除块设备请求队列
@@ -682,8 +692,6 @@ static void sbull_exit(void)
 	//注销设备
 	//这里的第二个参数怎么和init函数里的不一样？
 	unregister_blkdev(sbull_major, "sbull");
-	//模块退出时必须把初始化函数里面分配的内存全部释放！
-	//否则，linux重新启动后会发现之前的某些东西残留在系统里面
 	//Devices使用kmalloc分配的，所以使用kfree释放
 	kfree(Devices);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
