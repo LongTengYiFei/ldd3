@@ -73,7 +73,7 @@ struct funny_mud_pee;
  */
 //这个值之前设置了30，太短了，导致我每次fdisk ，mkfs之后就失效了，所以总是mount失败
 //有的时候fdisk之后就失效了，连mkfs都不行。
-#define INVALIDATE_DELAY	3000*HZ
+#define INVALIDATE_DELAY	10*HZ
 
 
 //我的一些ioctl命令的定义
@@ -371,9 +371,12 @@ static void sbull_release(struct gendisk *disk, fmode_t mode)
 	spin_lock(&dev->lock);
 	printk(KERN_ALERT"%s() spin_lock locked!",__func__);
 	dev->users--;
-
-	if (!dev->users) {
+	//如果没有用户了，那么启动介质移除定时器！
+	if (dev->users == 0) {
+		//Linux内核使用全局变量jiffies记录系统自从启动以来的滴答数。
+		//从现在的jiffies再推迟INVALIDATE_DELAY
 		dev->timer.expires = jiffies + INVALIDATE_DELAY;
+		//激活定时器
 		add_timer(&dev->timer);
 	}
 	spin_unlock(&dev->lock);
@@ -540,6 +543,8 @@ static void setup_device(struct sbull_dev *dev, int which)
 	/*
 	 * The timer which "invalidates" the device.
 	 */
+	//初始化timer，注册回调函数
+	//flag是0 flag随便穿一个数就行
         timer_setup(&dev->timer, sbull_invalidate, 0);
 
 	/*
