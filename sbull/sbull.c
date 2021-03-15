@@ -484,11 +484,7 @@ static struct block_device_operations sbull_ops = {
 	.owner           = THIS_MODULE,
 	.open 	         = sbull_open,
 	.release 	 = sbull_release,
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0))
 	.media_changed   = sbull_media_changed,  // DEPRECATED in v5.9
-#else
-	.submit_bio      = sbull_make_request,
-#endif
 	.revalidate_disk = sbull_revalidate,
 	.ioctl	         = sbull_ioctl
 };
