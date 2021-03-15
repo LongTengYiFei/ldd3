@@ -37,7 +37,7 @@ static int hardsect_size = 512;
 module_param(hardsect_size, int, 0);
 static int nsectors = 1024 * 20;	/* How big the drive is */
 module_param(nsectors, int, 0);
-static int ndevices = 3;
+static int ndevices = 1;
 module_param(ndevices, int, 0);
 
 /*
@@ -48,6 +48,7 @@ enum {
 	RM_FULL    = 1,	/* The full-blown version */
 	RM_NOQUEUE = 2,	/* Use make_request */
 	RM_MQ = 3,/* cyf two-level multi-queue mode*/
+	RM_STACKBD = 4;
 };
 static int request_mode = RM_MQ;
 module_param(request_mode, int, 0);
@@ -73,6 +74,10 @@ struct funny_mud_pee;
 //这个值之前设置了30，太短了，导致我每次fdisk ，mkfs之后就失效了，所以总是mount失败
 //有的时候fdisk之后就失效了，连mkfs都不行。
 #define INVALIDATE_DELAY	3000*HZ
+
+
+//我的一些ioctl命令的定义
+#define SAYHELLO_CYFCMD  666666
 
 /*
  * The internal representation of our device.
@@ -457,6 +462,10 @@ int sbull_ioctl (struct block_device *bdev, fmode_t mode,
 		if (copy_to_user((void __user *) arg, &geo, sizeof(geo)))
 			return -EFAULT;
 		return 0;
+
+	    case SAYHELLO_CYFCMD:
+		printk(KERN_NOTICE"get cyf cmd sayhello, hello!!");
+		return 0;
 	}
 
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
@@ -542,7 +551,8 @@ static void setup_device(struct sbull_dev *dev, int which)
 	 */
 	switch (request_mode) {
 	    case RM_NOQUEUE:
-		dev->queue = blk_alloc_queue(GFP_KERNEL);
+		//并没有真的建立一个保存请求的队列
+		    dev->queue = blk_alloc_queue(GFP_KERNEL);
 		if (dev->queue != NULL)
 			//requset_queue	内部有个指向制造请求函数的指针
 			//这里其实就是注册回调函数
@@ -553,6 +563,7 @@ static void setup_device(struct sbull_dev *dev, int which)
 
 	    case RM_FULL:
 		dev->queue = blk_mq_init_sq_queue(&dev->tag_set, &mq_ops_full, 128, BLK_MQ_F_SHOULD_MERGE);
+		printk(KERN_NOTICE"the nr_maps is %d", dev->tag_set.nr_maps);
 		if (dev->queue == NULL)
 			goto out_vfree;
 		break;
@@ -578,20 +589,26 @@ static void setup_device(struct sbull_dev *dev, int which)
 		dev->tag_set.cmd_size = sizeof(struct sbull_dev);//每个请求的额外数据
 		dev->tag_set.flags = BLK_MQ_F_SHOULD_MERGE;
 		dev->tag_set.driver_data = dev;//这是一个void类型的指针，每个请求的额外数据应该就是这个
-
+		
+		//blk-mq-alloc-tag-set会默认设置nr-maps为1
 		if(blk_mq_alloc_tag_set(&dev->tag_set)){
 			printk(KERN_ALERT"amazing, tag_set set failure!");
 			goto out_vfree;
 		}
-
+		printk(KERN_NOTICE"the nr_maps is %d", dev->tag_set.nr_maps);
 		//tag set可以是多个队列共享的
 		dev->queue = blk_mq_init_queue(&dev->tag_set);
 		if(dev->queue == NULL)
 			goto out_vfree;
 
 		break;
+
+	    case RM_STACKBD:
+		printk(KERN_NOTICE"come into cyf stackbd mode!");
+		break;
 	}
-	
+	//硬件扇区大小作为第一个参数放入请求队列
+	//分配队列后立刻设置扇区大小	
 	blk_queue_logical_block_size(dev->queue, hardsect_size);
 	dev->queue->queuedata = dev;//queuedata 是void类型指针
 	/*
