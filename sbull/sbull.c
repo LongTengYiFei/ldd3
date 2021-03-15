@@ -414,18 +414,10 @@ int sbull_revalidate(struct gendisk *gd)
  * The "invalidate" function runs out of the device timer; it sets
  * a flag to simulate the removal of the media.
  */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)) && !defined(timer_setup)
-void sbull_invalidate(unsigned long ldev)
-{
-	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-        struct sbull_dev *dev = (struct sbull_dev *) ldev;
-#else
 void sbull_invalidate(struct timer_list * ldev)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
         struct sbull_dev *dev = from_timer(dev, ldev, timer);
-#endif
-
 	spin_lock(&dev->lock);
 	if (dev->users || !dev->data) 
 		printk (KERN_WARNING "sbull: timer sanity check failed\n");
