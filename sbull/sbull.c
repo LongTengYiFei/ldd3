@@ -1,7 +1,8 @@
 /*
  * Sample disk driver, from the beginning.
  */
-
+//毕设是linux 5.4
+//会删除一些无效的不同版本的代码
 #include <linux/version.h> 	/* LINUX_VERSION_CODE  */
 #include <linux/blk-mq.h>	
 /* https://olegkutkov.me/2020/02/10/linux-block-device-driver/
@@ -339,22 +340,7 @@ static int sbull_open(struct block_device *bdev, fmode_t mode)
 	spin_lock(&dev->lock);
 	if (! dev->users) 
 	{
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
 		check_disk_change(bdev);
-#else
-                /* For newer kernels (as of 5.10), bdev_check_media_change()
-                 * is used, in favor of check_disk_change(),
-                 * with the modification that invalidation
-                 * is no longer forced. */
-
-                if(bdev_check_media_change(bdev))
-                {
-                        struct gendisk *gd = bdev->bd_disk;
-                        const struct block_device_operations *bdo = gd->fops;
-                        if (bdo && bdo->revalidate_disk)
-                                bdo->revalidate_disk(gd);
-                }
-#endif
 	}
 	dev->users++;
 	spin_unlock(&dev->lock);
@@ -422,6 +408,8 @@ void sbull_invalidate(struct timer_list * ldev)
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
         struct sbull_dev *dev = from_timer(dev, ldev, timer);
 	spin_lock(&dev->lock);
+	//如果又有用户来了或者data不空
+	//那么就不media change
 	if (dev->users || !dev->data) 
 		printk (KERN_WARNING "sbull: timer sanity check failed\n");
 	else
