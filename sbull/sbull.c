@@ -365,6 +365,7 @@ static int sbull_open(struct block_device *bdev, fmode_t mode)
 static void sbull_release(struct gendisk *disk, fmode_t mode)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+	//同样的，gendisk里面的private-data是void*
 	struct sbull_dev *dev = disk->private_data;
 
 	spin_lock(&dev->lock);
@@ -547,13 +548,7 @@ static void setup_device(struct sbull_dev *dev, int which)
 	/*
 	 * The timer which "invalidates" the device.
 	 */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)) && !defined(timer_setup)
-	init_timer(&dev->timer);
-	dev->timer.data = (unsigned long) dev;
-	dev->timer.function = sbull_invalidate;
-#else
         timer_setup(&dev->timer, sbull_invalidate, 0);
-#endif
 
 	/*
 	 * The I/O queue, depending on whether we are using our own
