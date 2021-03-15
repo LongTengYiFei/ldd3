@@ -393,7 +393,8 @@ int sbull_revalidate(struct gendisk *gd)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct sbull_dev *dev = gd->private_data;
-	
+	//如果设备介质改变
+	//清空设备内存空间，模拟插入一张空白的磁盘。	
 	if (dev->media_change) {
 		dev->media_change = 0;
 		memset (dev->data, 0, dev->size);
