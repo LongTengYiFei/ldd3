@@ -335,9 +335,10 @@ static int sbull_open(struct block_device *bdev, fmode_t mode)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct sbull_dev *dev = bdev->bd_disk->private_data;
-
+	//移除定时器
 	del_timer_sync(&dev->timer);
 	spin_lock(&dev->lock);
+	//如果没有用户，那么检查介质是否已改变
 	if (! dev->users) 
 	{
 		check_disk_change(bdev);
