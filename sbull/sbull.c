@@ -341,6 +341,8 @@ static int sbull_open(struct block_device *bdev, fmode_t mode)
 	//如果没有用户，那么检查介质是否已改变
 	if (! dev->users) 
 	{
+		//观察内核源码check-disk-change可能会调用revalidate函数
+		//就是我们的sbull-revalidate
 		check_disk_change(bdev);
 	}
 	dev->users++;
