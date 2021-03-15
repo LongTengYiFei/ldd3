@@ -48,7 +48,7 @@ enum {
 	RM_FULL    = 1,	/* The full-blown version */
 	RM_NOQUEUE = 2,	/* Use make_request */
 	RM_MQ = 3,/* cyf two-level multi-queue mode*/
-	RM_STACKBD = 4;
+	RM_STACKBD = 4,
 };
 static int request_mode = RM_MQ;
 module_param(request_mode, int, 0);
@@ -436,18 +436,27 @@ void sbull_invalidate(struct timer_list * ldev)
 
 /*
  * The ioctl() implementation
+ * 块层会先截取命令，识别不了的才会交给sbull的。
+ * 不管用户是用整数arg还是指针arg，这里的arg都是unsigned long
+ *
+ * 如果在用户空间调用ioctl，可能会调用这里的sbull ioctl，实测可以
+ * 传入cmd是666666，块设备层应该识别不了，就传到这儿了。
  */
-
 int sbull_ioctl (struct block_device *bdev, fmode_t mode,
                  unsigned int cmd, unsigned long arg)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	long size;
+	//内核定义的一个结构体，只有4个变量
 	struct hd_geometry geo;
+	//block_device is a kernel struct ,bd_disk is a member ,it is gendisk*
+	//gendisk has a member ,a void *,it is private_data
+	//so that is block_device* -- gendisk* -- void*
 	struct sbull_dev *dev = bdev->bd_disk->private_data;
 
 	switch(cmd) {
 	    case HDIO_GETGEO:
+		//几何结构
         	/*
 		 * Get geometry: since we are a virtual device, we have to make
 		 * up something plausible.  So we claim 16 sectors, four heads,
@@ -455,10 +464,11 @@ int sbull_ioctl (struct block_device *bdev, fmode_t mode,
 		 * start of data at sector four.
 		 */
 		size = dev->size*(hardsect_size/KERNEL_SECTOR_SIZE);
-		geo.cylinders = (size & ~0x3f) >> 6;
-		geo.heads = 4;
+		geo.cylinders = (size & ~0x3f) >> 6;//相当于一个煮面的大小是2的6次方
+		geo.heads = 4;//4个磁头
 		geo.sectors = 16;
 		geo.start = 4;
+		//本质上也就是个memmove函数
 		if (copy_to_user((void __user *) arg, &geo, sizeof(geo)))
 			return -EFAULT;
 		return 0;
