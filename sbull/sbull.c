@@ -626,9 +626,9 @@ static int __init sbull_init(void)
 	int i;
 	//向内核注册自己
 	//如果传入的参数是0，内核将返还新的主设备号
+	//主设备号对应驱动程序，而次设备号对应这个驱动下的某个具体设备
 	sbull_major = register_blkdev(sbull_major, "sbull");
 	printk(KERN_NOTICE"get new major number:%d", sbull_major);	
-	
 	//如果返回负值，则表示出现了错误
 	//书上写的负值，但是这里却包括了0
 	if (sbull_major <= 0) {
