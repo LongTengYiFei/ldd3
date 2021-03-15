@@ -118,30 +118,6 @@ static int hw_queue_depth = 64;
 
 static struct sbull_dev *Devices = NULL;
 
-/**
-* See https://github.com/openzfs/zfs/pull/10187/
-*/
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0))
-static inline struct request_queue *
-blk_generic_alloc_queue(make_request_fn make_request, int node_id)
-#else
-static inline struct request_queue *
-blk_generic_alloc_queue(int node_id)
-#endif
-{
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0))
-
-	struct request_queue *q = blk_alloc_queue(GFP_KERNEL);
-	if (q != NULL)
-		blk_queue_make_request(q, make_request);
-
-	return (q);
-#elif (LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0))
-	return (blk_alloc_queue(make_request, node_id));
-#else
-	return (blk_alloc_queue(node_id));
-#endif
-}
 
 /*
  * Handle an I/O request.
