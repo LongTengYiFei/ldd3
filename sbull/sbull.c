@@ -74,7 +74,7 @@ struct funny_mud_pee;
  */
 //这个值之前设置了30，太短了，导致我每次fdisk ，mkfs之后就失效了，所以总是mount失败
 //有的时候fdisk之后就失效了，连mkfs都不行。
-#define INVALIDATE_DELAY	10*HZ
+#define INVALIDATE_DELAY	500*HZ
 
 
 //我的一些ioctl命令的定义
@@ -140,15 +140,6 @@ static void sbull_transfer(struct sbull_dev *dev, unsigned long sector_index,
 	else
 		memcpy(buffer, dev->data + dev_offset, byte_count);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-}
-
-
-//转发至真实的磁盘分区
-//暂时保证和sbull_transfer的参数列表不变:
-static void sbull_transfer_Real_disk_part(struct sbull_dev *dev, unsigned long sector,
-		unsigned long sect_count, char *buffer, int write)
-{
-	return ;
 }
 
 /*
@@ -283,8 +274,8 @@ static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx, const struct b
 	struct request *req = bd->rq;
 	int sectors_xferred;//就算统计了已经转发的扇区数目好像也没什么用
 	struct sbull_dev *dev = req->q->queuedata;
-	blk_status_t  ret;
-
+	blk_status_t  ret;//u32
+	//void函数
 	blk_mq_start_request (req);
 	if (blk_rq_is_passthrough(req)) {
 		printk (KERN_NOTICE "Skip non-fs request\n");
@@ -292,7 +283,7 @@ static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx, const struct b
 		goto done;
 	}
 	sectors_xferred = sbull_xfer_request(dev, req);
-	ret = BLK_STS_OK; 
+	ret = BLK_STS_OK; //宏定义0
 	done:
 		blk_mq_end_request (req, ret);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
@@ -570,8 +561,8 @@ static void setup_device(struct sbull_dev *dev, int which)
 	}
 	//硬件扇区大小作为第一个参数放入请求队列
 	//分配队列后立刻设置扇区大小	
-	blk_queue_logical_block_size(dev->queue, hardsect_size);
 	dev->queue->queuedata = dev;//queuedata 是void类型指针
+	blk_queue_logical_block_size(dev->queue, hardsect_size);
 	/*
 	 * And the gendisk structure.
 	 */
