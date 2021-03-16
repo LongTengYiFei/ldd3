@@ -127,7 +127,8 @@ static void sbull_transfer(struct sbull_dev *dev, unsigned long sector_index,
 		unsigned long sect_count, char *buffer, int write)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
-	
+	//buffer 是从物理页映射过来的
+	//我们的dev作为虚拟磁盘	
 	unsigned long dev_offset = sector_index*KERNEL_SECTOR_SIZE;
 	unsigned long byte_count = sect_count*KERNEL_SECTOR_SIZE;
 
@@ -135,9 +136,13 @@ static void sbull_transfer(struct sbull_dev *dev, unsigned long sector_index,
 		printk (KERN_NOTICE "Beyond-end write (%ld %ld)\n", dev_offset, byte_count);
 		return;
 	}
+	//写操作就是把物理内存的数据写到磁盘中，磁盘就是我们的dev-data
+	//物理内存是被映射到buffer了
 	if (write)
 		memcpy(dev->data + dev_offset, buffer, byte_count);
 	else
+		//读操作就是把磁盘的数据送到物理内存
+		//磁盘是dev-data，物理内存是buffer
 		memcpy(buffer, dev->data + dev_offset, byte_count);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 }
