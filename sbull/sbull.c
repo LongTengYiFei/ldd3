@@ -148,16 +148,24 @@ static void sbull_transfer(struct sbull_dev *dev, unsigned long sector_index,
 static int sbull_xfer_bio(struct sbull_dev *dev, struct bio *bio)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+	//io向量：哪个页，offset，len
 	struct bio_vec bvec;
+	//仅仅是用来便利用的
 	struct bvec_iter iter;
+	//要操作哪个扇区
 	sector_t sector = bio->bi_iter.bi_sector;
 
 	/* Do each segment independently. */
 	bio_for_each_segment(bvec, bio, iter) {
+		//把物理页映射到内核空间，返回一个虚拟地址
 		char *buffer = kmap_atomic(bvec.bv_page) + bvec.bv_offset;
+		//单个段转发 子模块
 		sbull_transfer(dev, sector, (bio_cur_bytes(bio) / KERNEL_SECTOR_SIZE),
 				buffer, bio_data_dir(bio) == WRITE);
+		//计算下一个sector
+		//bio cur bytes 是获取当前bio_vec.bv_len
 		sector += (bio_cur_bytes(bio) / KERNEL_SECTOR_SIZE);
+		//解除映射
 		kunmap_atomic(buffer);
 	}
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
