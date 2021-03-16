@@ -267,7 +267,7 @@ static blk_qc_t sbull_make_request(struct request_queue *q, struct bio *bio)
 	return BLK_QC_T_NONE;
 }
 
-
+//请求处理模块（多队列模式）
 static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_data *bd)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
@@ -276,14 +276,20 @@ static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx, const struct b
 	struct sbull_dev *dev = req->q->queuedata;
 	blk_status_t  ret;//u32
 	//void函数
+	printk(KERN_NOTICE"the req is %p", req);
 	blk_mq_start_request (req);
+
 	if (blk_rq_is_passthrough(req)) {
 		printk (KERN_NOTICE "Skip non-fs request\n");
 		ret = BLK_STS_IOERR; //-EIO;
 		goto done;
 	}
+	//请求转发 子模块
 	sectors_xferred = sbull_xfer_request(dev, req);
 	ret = BLK_STS_OK; //宏定义0
+	//不管goto执不执行，都会执行到这里
+	//把req从队列移除
+	//如果不移除，那么就会不断执行第一条请求，死循环，ctrl c也没用
 	done:
 		blk_mq_end_request (req, ret);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
