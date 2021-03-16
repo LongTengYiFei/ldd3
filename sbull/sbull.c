@@ -172,10 +172,11 @@ static int sbull_xfer_request(struct sbull_dev *dev, struct request *req)
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct bio *bio;
 	int sect_count = 0;
-    
+   	//一个宏，便利请求中所有的bio 
 	__rq_for_each_bio(bio, req) {
+		//转发bio 子模块
 		sbull_xfer_bio(dev, bio);
-		//printk(KERN_ALERT"the bi_size is %d", bio->bi_iter.bi_size);
+		printk(KERN_ALERT"the bi_size is %d", bio->bi_iter.bi_size);
 		sect_count += bio->bi_iter.bi_size/KERNEL_SECTOR_SIZE;
 	}
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
@@ -286,6 +287,7 @@ static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx, const struct b
 		goto done;
 	}
 	//请求转发 子模块
+	//统计已转发的扇区数好像也没啥用。
 	sectors_xferred = sbull_xfer_request(dev, req);
 	ret = BLK_STS_OK; //宏定义0
 	//不管goto执不执行，都会执行到这里
