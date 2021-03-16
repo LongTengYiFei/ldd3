@@ -263,12 +263,7 @@ static blk_status_t sbull_full_request(struct blk_mq_hw_ctx * hctx, const struct
 /*
  * The direct make request version.
  */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0))
-//static void sbull_make_request(struct request_queue *q, struct bio *bio)
 static blk_qc_t sbull_make_request(struct request_queue *q, struct bio *bio)
-#else
-static blk_qc_t sbull_make_request(struct bio *bio)
-#endif
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct sbull_dev *dev = bio->bi_disk->private_data;
@@ -286,7 +281,7 @@ static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx, const struct b
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	struct request *req = bd->rq;
-	int sectors_xferred;
+	int sectors_xferred;//就算统计了已经转发的扇区数目好像也没什么用
 	struct sbull_dev *dev = req->q->queuedata;
 	blk_status_t  ret;
 
