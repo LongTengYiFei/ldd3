@@ -275,10 +275,11 @@ static  blk_status_t sbull_mq_request(struct blk_mq_hw_ctx *hctx, const struct b
 	int sectors_xferred;//就算统计了已经转发的扇区数目好像也没什么用
 	struct sbull_dev *dev = req->q->queuedata;
 	blk_status_t  ret;//u32
-	//void函数
 	printk(KERN_NOTICE"the req is %p", req);
+	//void 函数，
+	//
 	blk_mq_start_request (req);
-
+	//有些请求不用处理，过掉就行
 	if (blk_rq_is_passthrough(req)) {
 		printk (KERN_NOTICE "Skip non-fs request\n");
 		ret = BLK_STS_IOERR; //-EIO;
