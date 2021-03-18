@@ -288,6 +288,7 @@ static blk_qc_t sbull_make_request(struct request_queue *q, struct bio *bio)
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return BLK_QC_T_NONE;
 }
+
 //原始设备打开函数
 static struct block_device *sbull_bdev_open(char dev_path[])
 {
@@ -304,13 +305,6 @@ static struct block_device *sbull_bdev_open(char dev_path[])
     if (!bdget(bdev_raw->bd_dev))
     {
         printk("stackbd: error bdget()\n");
-        return NULL;
-    }
-
-    if (blkdev_get(bdev_raw, STACKBD_BDEV_MODE, &stackbd))
-    {
-        printk("stackbd: error blkdev_get()\n");
-        bdput(bdev_raw);
         return NULL;
     }
 
