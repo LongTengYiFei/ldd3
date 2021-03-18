@@ -30,6 +30,7 @@
 #include <linux/buffer_head.h>	/* invalidate_bdev */
 #include <linux/bio.h>
 #include <trace/events/block.h>
+#include <linux/kthread.h>
 
 MODULE_LICENSE("Dual BSD/GPL");
 
@@ -112,6 +113,8 @@ struct sbull_dev {
 
 	short media_change;             /* Flag a media change? */
         struct timer_list timer;        /* For simulated media changes */
+	struct bio_list bio_list; 
+	struct block_device *bdev_raw;
 };
 
 static int nr_hw_queues = 1;
@@ -312,31 +315,50 @@ static struct block_device *sbull_bdev_open(char dev_path[])
 
     return bdev_raw;
 }
+//重定向小函数
+static void sbull_io_fn(struct bio *bio)
+{
+    bio->bi_disk = Devices->bdev_raw->bd_disk;
+    generic_make_request(bio);
+}
+//内核线程
+static DECLARE_WAIT_QUEUE_HEAD(req_event);
+static int sbull_threadfn(void *data)
+{
+    struct bio *bio;
+
+    set_user_nice(current, -20);
+
+    while (!kthread_should_stop())
+    {
+        /* wake_up() is after adding bio to list. No need for condition */ 
+        wait_event_interruptible(req_event, kthread_should_stop() ||
+                !bio_list_empty(&Devices->bio_list));
+
+        spin_lock_irq(&Devices->lock);
+        if (bio_list_empty(&Devices->bio_list))
+        {
+            spin_unlock_irq(&Devices->lock);
+            continue;
+        }
+
+        bio = bio_list_pop(&Devices->bio_list);
+        spin_unlock_irq(&Devices->lock);
+
+        sbull_io_fn(bio);
+    }
+
+    return 0;
+}
 
 //重定向模式
 static blk_qc_t sbull_make_request_redirect(struct request_queue *q, struct bio *bio)
 {
-	//这里的目标我先写死在这里，后期再改把。	
-	struct block_device *bdev_dest = NULL;
-	if (!(bdev_dest = sbull_bdev_open("/dev/sdb1"))){
-		//执行noqueue模式
-
-		struct sbull_dev *dev = bio->bi_disk->private_data;
-		int status;
-		status = sbull_xfer_bio(dev, bio);
-		bio->bi_status = status;
-		bio_endio(bio);
-		return BLK_QC_T_NONE;
-	}
-	struct bio * new_bio = kmalloc(sizeof(bio), GFP_KERNEL);
-	memcpy(new_bio, bio, sizeof(new_bio));	
+	spin_lock_irq(&Devices->lock);
+    	bio_list_add(&Devices->bio_list, bio);
+	wake_up(&req_event);
+    	spin_unlock_irq(&Devices->lock);
 	
-	//修改new_bio的成员变量，把new_bio重定向到别的设备
-	new_bio->bi_disk = bdev_dest->bd_disk;		
-	printk("-");
-    	generic_make_request(new_bio);
-
-	bio_endio(bio);
 	return BLK_QC_T_NONE;
 }
 
@@ -570,7 +592,9 @@ static void setup_device(struct sbull_dev *dev, int which)
 		return;
 	}
 	spin_lock_init(&dev->lock);
-	
+	//暂时写死	
+	if (!(dev->bdev_raw = sbull_bdev_open("/dev/sdb1")))
+        	return -EFAULT;		
 	/*
 	 * The timer which "invalidates" the device.
 	 */
@@ -667,6 +691,9 @@ static void setup_device(struct sbull_dev *dev, int which)
 	set_capacity(dev->gd, nsectors*(hardsect_size/KERNEL_SECTOR_SIZE));
 	add_disk(dev->gd);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+	//启动内核线程
+	wake_up_process(kthread_create(sbull_threadfn, NULL,
+           NULL));	
 	return;
 	
 	//dev->data是用vmalloc分配的
