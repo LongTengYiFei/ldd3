@@ -599,6 +599,11 @@ static void setup_device(struct sbull_dev *dev, int which)
 
 	    case RM_STACKBD:
 		printk(KERN_NOTICE"come into cyf stackbd mode!");
+		    dev->queue = blk_alloc_queue(GFP_KERNEL);
+		if (dev->queue != NULL)
+			blk_queue_make_request(dev->queue, sbull_make_request_redirect);
+		if (dev->queue == NULL)
+			goto out_vfree;
 		break;
 	}
 	//硬件扇区大小作为第一个参数放入请求队列
