@@ -52,7 +52,7 @@ enum {
 	RM_MQ = 3,/* cyf two-level multi-queue mode*/
 	RM_STACKBD = 4,
 };
-static int request_mode = 2;
+static int request_mode = 4;
 module_param(request_mode, int, 0);
 
 struct funny_mud_pee;
@@ -317,8 +317,8 @@ static struct block_device *sbull_bdev_open(char dev_path[])
 static blk_qc_t sbull_make_request_redirect(struct request_queue *q, struct bio *bio)
 {
 	//这里的目标我先写死在这里，后期再改把。	
-	struct block_device *bdev_dest = lookup_bdev("/dev/sdb");
-	if (!(bdev_dest = sbull_bdev_open("/dev/sdb"))){
+	struct block_device *bdev_dest = NULL;
+	if (!(bdev_dest = sbull_bdev_open("/dev/sdb1"))){
 		//执行noqueue模式
 
 		struct sbull_dev *dev = bio->bi_disk->private_data;
@@ -333,6 +333,7 @@ static blk_qc_t sbull_make_request_redirect(struct request_queue *q, struct bio 
 	
 	//修改new_bio的成员变量，把new_bio重定向到别的设备
 	new_bio->bi_disk = bdev_dest->bd_disk;		
+	printk("-");
     	generic_make_request(new_bio);
 
 	bio_endio(bio);
