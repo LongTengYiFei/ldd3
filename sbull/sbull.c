@@ -316,7 +316,17 @@ static blk_qc_t sbull_make_request_redirect(struct request_queue *q, struct bio 
 {
 	//这里的目标我先写死在这里，后期再改把。	
 	struct block_device *bdev_dest = lookup_bdev("/dev/sdb");
-	printk(KERN_NOTICE"the dest bd inode num is %d", bdev_dest->bd_inode->i_ino);
+	if (!(bdev_dest = sbull_bdev_open("/dev/sdb"))){
+		//执行noqueue模式
+
+		struct sbull_dev *dev = bio->bi_disk->private_data;
+		int status;
+		status = sbull_xfer_bio(dev, bio);
+		bio->bi_status = status;
+		bio_endio(bio);
+		return BLK_QC_T_NONE;
+	}
+
 	//修改bio的成员变量，把bio重定向到别的设备
 	bio->bi_disk = bdev_dest->bd_disk;		
     	/* No need to call bio_endio() */
