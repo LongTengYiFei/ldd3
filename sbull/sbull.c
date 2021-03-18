@@ -268,14 +268,21 @@ static blk_status_t sbull_full_request(struct blk_mq_hw_ctx * hctx, const struct
 /*
  * The direct make request version.
  */
+//注意，make-request可以直接对bio进行传输，也可以把请求重定向给其他设备
+//这里的版本的直接传输
 static blk_qc_t sbull_make_request(struct request_queue *q, struct bio *bio)
 {
 	printk(KERN_ALERT"%s() begin.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
+	//bi_disk 是一个gendisk指针
+	//private_data是gendisk里的一个void指针
 	struct sbull_dev *dev = bio->bi_disk->private_data;
 	int status;
-
+	//我们总是让xfer-bio返回0，就是成功。
 	status = sbull_xfer_bio(dev, bio);
+	//bi_status是blk_status_t，是u32
+	//0就是成功，宏定义为BLK_STS_OK
 	bio->bi_status = status;
+	//通知bio的创建者这个bio已经完成了转发
 	bio_endio(bio);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return BLK_QC_T_NONE;
