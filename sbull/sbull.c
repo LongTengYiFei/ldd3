@@ -52,7 +52,7 @@ enum {
 	RM_MQ = 3,/* cyf two-level multi-queue mode*/
 	RM_STACKBD = 4,
 };
-static int request_mode = RM_MQ;
+static int request_mode = 4;
 module_param(request_mode, int, 0);
 
 struct funny_mud_pee;
@@ -287,6 +287,34 @@ static blk_qc_t sbull_make_request(struct request_queue *q, struct bio *bio)
 	bio_endio(bio);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return BLK_QC_T_NONE;
+}
+//原始设备打开函数
+static struct block_device *sbull_bdev_open(char dev_path[])
+{
+    /* Open underlying device */
+    struct block_device *bdev_raw = lookup_bdev(dev_path);
+    printk("Opened %s\n", dev_path);
+
+    if (IS_ERR(bdev_raw))
+    {
+        printk("stackbd: error opening raw device <%lu>\n", PTR_ERR(bdev_raw));
+        return NULL;
+    }
+
+    if (!bdget(bdev_raw->bd_dev))
+    {
+        printk("stackbd: error bdget()\n");
+        return NULL;
+    }
+
+    if (blkdev_get(bdev_raw, STACKBD_BDEV_MODE, &stackbd))
+    {
+        printk("stackbd: error blkdev_get()\n");
+        bdput(bdev_raw);
+        return NULL;
+    }
+
+    return bdev_raw;
 }
 
 //重定向模式
