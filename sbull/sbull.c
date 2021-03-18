@@ -328,7 +328,7 @@ static blk_qc_t sbull_make_request_redirect(struct request_queue *q, struct bio 
 		bio_endio(bio);
 		return BLK_QC_T_NONE;
 	}
-	struct bio * new_bio = kmalloc(sizeof(bio));
+	struct bio * new_bio = kmalloc(sizeof(bio), GFP_KERNEL);
 	memcpy(new_bio, bio, sizeof(new_bio));	
 	
 	//修改new_bio的成员变量，把new_bio重定向到别的设备
