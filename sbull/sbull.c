@@ -52,7 +52,7 @@ enum {
 	RM_MQ = 3,/* cyf two-level multi-queue mode*/
 	RM_STACKBD = 4,
 };
-static int request_mode = 4;
+static int request_mode = 2;
 module_param(request_mode, int, 0);
 
 struct funny_mud_pee;
@@ -278,6 +278,7 @@ static blk_qc_t sbull_make_request(struct request_queue *q, struct bio *bio)
 	//private_data是gendisk里的一个void指针
 	struct sbull_dev *dev = bio->bi_disk->private_data;
 	int status;
+	printk(KERN_NOTICE"the next bio is %p", bio->bi_next);
 	//我们总是让xfer-bio返回0，就是成功。
 	status = sbull_xfer_bio(dev, bio);
 	//bi_status是blk_status_t，是u32
@@ -285,6 +286,7 @@ static blk_qc_t sbull_make_request(struct request_queue *q, struct bio *bio)
 	bio->bi_status = status;
 	//通知bio的创建者这个bio已经完成了转发
 	bio_endio(bio);
+	printk(KERN_NOTICE"after end bio the next bio is %p", bio->bi_next);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return BLK_QC_T_NONE;
 }
@@ -326,11 +328,15 @@ static blk_qc_t sbull_make_request_redirect(struct request_queue *q, struct bio 
 		bio_endio(bio);
 		return BLK_QC_T_NONE;
 	}
+	struct bio * new_bio = kmalloc(sizeof(bio));
+	memcpy(new_bio, bio, sizeof(new_bio));	
+	
+	//修改new_bio的成员变量，把new_bio重定向到别的设备
+	new_bio->bi_disk = bdev_dest->bd_disk;		
+    	generic_make_request(new_bio);
 
-	//修改bio的成员变量，把bio重定向到别的设备
-	bio->bi_disk = bdev_dest->bd_disk;		
-    	/* No need to call bio_endio() */
-    	generic_make_request(bio);
+	bio_endio(bio);
+	return BLK_QC_T_NONE;
 }
 
 //请求处理模块（多队列模式）
