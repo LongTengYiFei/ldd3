@@ -29,6 +29,7 @@
 #include <linux/blkdev.h>
 #include <linux/buffer_head.h>	/* invalidate_bdev */
 #include <linux/bio.h>
+#include <trace/events/block.h>
 
 MODULE_LICENSE("Dual BSD/GPL");
 
@@ -74,7 +75,7 @@ struct funny_mud_pee;
  */
 //这个值之前设置了30，太短了，导致我每次fdisk ，mkfs之后就失效了，所以总是mount失败
 //有的时候fdisk之后就失效了，连mkfs都不行。
-#define INVALIDATE_DELAY	500*HZ
+#define INVALIDATE_DELAY	6000*HZ
 
 
 //我的一些ioctl命令的定义
@@ -286,6 +287,18 @@ static blk_qc_t sbull_make_request(struct request_queue *q, struct bio *bio)
 	bio_endio(bio);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	return BLK_QC_T_NONE;
+}
+
+//重定向模式
+static blk_qc_t sbull_make_request_redirect(struct request_queue *q, struct bio *bio)
+{
+	//这里的目标我先写死在这里，后期再改把。	
+	struct block_device *bdev_dest = lookup_bdev("/dev/sdb");
+	printk(KERN_NOTICE"the dest bd inode num is %d", bdev_dest->bd_inode->i_ino);
+	//修改bio的成员变量，把bio重定向到别的设备
+	bio->bi_disk = bdev_dest->bd_disk;		
+    	/* No need to call bio_endio() */
+    	generic_make_request(bio);
 }
 
 //请求处理模块（多队列模式）
