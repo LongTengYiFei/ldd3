@@ -53,7 +53,7 @@ enum {
 	RM_MQ = 3,/* cyf two-level multi-queue mode*/
 	RM_STACKBD = 4,
 };
-static int request_mode = 3;
+static int request_mode = 4;
 module_param(request_mode, int, 0);
 
 struct funny_mud_pee;
@@ -362,11 +362,8 @@ static int sbull_threadfn(void *data)
 //重定向模式
 static blk_qc_t sbull_make_request_redirect(struct request_queue *q, struct bio *bio)
 {
-	spin_lock_irq(&Devices->lock);
-    	bio_list_add(&Devices->bio_list, bio);
-	wake_up(&req_event);
-    	spin_unlock_irq(&Devices->lock);
-	
+	bio->bi_disk = Devices->bdev_raw->bd_disk;
+	generic_make_request(bio);	
 	return BLK_QC_T_NONE;
 }
 
@@ -604,12 +601,6 @@ static void setup_device(struct sbull_dev *dev, int which)
 		return;
 	}
 	spin_lock_init(&dev->lock);
-	//暂时写死	
-	if (!(dev->bdev_raw = sbull_bdev_open("/dev/sdb1")))
-	{
-		printk(KERN_NOTICE"raw open failure");
-		return -EFAULT;		
-	}
 	
 	/*
 	 * The timer which "invalidates" the device.
@@ -678,7 +669,13 @@ static void setup_device(struct sbull_dev *dev, int which)
 
 	    case RM_STACKBD:
 		printk(KERN_NOTICE"come into cyf stackbd mode!");
-		    dev->queue = blk_alloc_queue(GFP_KERNEL);
+		dev->queue = blk_alloc_queue(GFP_KERNEL);
+		//暂时写死路径	
+		if (!(dev->bdev_raw = sbull_bdev_open("/dev/sdb1")))
+		{
+			printk(KERN_NOTICE"raw open failure");
+			return -EFAULT;		
+		}
 		if (dev->queue != NULL)
 			blk_queue_make_request(dev->queue, sbull_make_request_redirect);
 		if (dev->queue == NULL)
