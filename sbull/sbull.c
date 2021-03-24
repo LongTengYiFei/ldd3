@@ -295,11 +295,12 @@ static blk_qc_t sbull_make_request(struct request_queue *q, struct bio *bio)
 }
 
 //原始设备打开函数
+#define STACKBD_BDEV_MODE (FMODE_READ | FMODE_WRITE | FMODE_EXCL)
 static struct block_device *sbull_bdev_open(char dev_path[])
 {
     /* Open underlying device */
     struct block_device *bdev_raw = lookup_bdev(dev_path);
-    printk("Opened %s\n", dev_path);
+    printk("Opened %s", dev_path);
 
     if (IS_ERR(bdev_raw))
     {
@@ -310,6 +311,13 @@ static struct block_device *sbull_bdev_open(char dev_path[])
     if (!bdget(bdev_raw->bd_dev))
     {
         printk("stackbd: error bdget()\n");
+        return NULL;
+    }
+
+    if (blkdev_get(bdev_raw, STACKBD_BDEV_MODE, Devices))
+    {
+        printk("stackbd: error blkdev_get()\n");
+        bdput(bdev_raw);
         return NULL;
     }
 
@@ -529,6 +537,10 @@ int sbull_ioctl (struct block_device *bdev, fmode_t mode,
 	    case SAYHELLO_CYFCMD:
 		printk(KERN_NOTICE"get cyf cmd sayhello, hello!!");
 		return 0;
+
+            case 2021:
+		printk(KERN_NOTICE"ioctl get cyf cmd 2021");
+		return 0;
 	}
 
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
@@ -593,8 +605,12 @@ static void setup_device(struct sbull_dev *dev, int which)
 	}
 	spin_lock_init(&dev->lock);
 	//暂时写死	
-	//if (!(dev->bdev_raw = sbull_bdev_open("/dev/sdb1")))
-        //	return -EFAULT;		
+	if (!(dev->bdev_raw = sbull_bdev_open("/dev/sdb1")))
+	{
+		printk(KERN_NOTICE"raw open failure");
+		return -EFAULT;		
+	}
+	
 	/*
 	 * The timer which "invalidates" the device.
 	 */
