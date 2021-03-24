@@ -53,7 +53,7 @@ enum {
 	RM_MQ = 3,/* cyf two-level multi-queue mode*/
 	RM_STACKBD = 4,
 };
-static int request_mode = 4;
+static int request_mode = 3;
 module_param(request_mode, int, 0);
 
 struct funny_mud_pee;
@@ -593,8 +593,8 @@ static void setup_device(struct sbull_dev *dev, int which)
 	}
 	spin_lock_init(&dev->lock);
 	//暂时写死	
-	if (!(dev->bdev_raw = sbull_bdev_open("/dev/sdb1")))
-        	return -EFAULT;		
+	//if (!(dev->bdev_raw = sbull_bdev_open("/dev/sdb1")))
+        //	return -EFAULT;		
 	/*
 	 * The timer which "invalidates" the device.
 	 */
@@ -692,8 +692,7 @@ static void setup_device(struct sbull_dev *dev, int which)
 	add_disk(dev->gd);
 	printk(KERN_ALERT"%s() over.The porcess is \"%s\" (pid %i)",__func__, current->comm, current->pid);
 	//启动内核线程
-	wake_up_process(kthread_create(sbull_threadfn, NULL,
-           NULL));	
+	//wake_up_process(kthread_create(sbull_threadfn, NULL, NULL));	
 	return;
 	
 	//dev->data是用vmalloc分配的
